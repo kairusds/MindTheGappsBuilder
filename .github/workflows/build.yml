@@ -1,13 +1,6 @@
 name: Build MindTheGapps
 
-on:
-  workflow_dispatch:
-    inputs:
-      release:
-        description: "Release"
-        required: true
-        default: false
-        type: boolean
+on: workflow_dispatch
 
 jobs:
   build:
@@ -17,8 +10,8 @@ jobs:
       attestations: write
     strategy:
       matrix:
-        arch: ["arm", "arm64", "x86_64"]
-        androidv: ["14.0.0", "15.0.0"]
+        arch: ["arm64", "x86_64"]
+        androidv: ["11.0.0"]
     name: Build ${{ matrix.androidv }}-${{ matrix.arch }}
     runs-on: ubuntu-24.04
     steps:
@@ -28,14 +21,13 @@ jobs:
 
       - name: Map version to tree
         run: |
-          declare -A ANDROID_VER_MAP=(["12.1.0"]="sigma" ["13.0.0"]="tau" ["14.0.0"]="upsilon" ["15.0.0"]="vic")
+          declare -A ANDROID_VER_MAP=(["11.0.0"]="rho" ["12.1.0"]="sigma" ["13.0.0"]="tau" ["14.0.0"]="upsilon" ["15.0.0"]="vic")
           echo "ANDROIDV=${ANDROID_VER_MAP[${{ matrix.androidv }}]}" >> $GITHUB_ENV
-          declare -A ANDROID_API_MAP=(["12.1.0"]=32 ["13.0.0"]=33 ["14.0.0"]=34 ["15.0.0"]=35)
+          declare -A ANDROID_API_MAP=(["11.0.0"]=30 ["12.1.0"]=32 ["13.0.0"]=33 ["14.0.0"]=34 ["15.0.0"]=35)
           echo "ANDROID_API=${ANDROID_API_MAP[${{ matrix.androidv }}]}" >> $GITHUB_ENV
 
       - name: Clone repository
         run: |
-          git config --global http.version HTTP/1.1
           git clone --depth=1 -b ${{ env.ANDROIDV }} https://gitlab.com/MindTheGapps/vendor_gapps.git/
 
       - name: Setup Java
@@ -54,34 +46,9 @@ jobs:
           ./build/gapps.sh ${{ matrix.androidv }} ${{ env.ANDROID_API}} ${{ matrix.arch }}
 
       - name: Attest
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v3
         with:
           subject-path: vendor_gapps/out/*.*
-
-      - name: Upload
-        if: github.event.inputs.release != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: Built_MindTheGapps-${{ matrix.androidv }}-${{ matrix.arch }}-${{ env.date }}
-          path: vendor_gapps/out/*.*
-          if-no-files-found: warn
-
-      - name: Setup SSH
-        if: github.event.inputs.release == 'true' && vars.SF_REPO != ''
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan frs.sourceforge.net >> ~/.ssh/known_hosts
-          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 0600 ~/.ssh/id_ed25519
-
-      - name: Upload to SourceForge
-        if: github.event.inputs.release == 'true' && vars.SF_REPO != ''
-        working-directory: vendor_gapps/out
-        run: |
-          mkdir -p ${{ matrix.arch }}
-          mkdir -p ${{ matrix.arch }}/${{ env.date }}
-          mv *.* ${{ matrix.arch }}/${{ env.date }}/
-          rsync -avP -e ssh ${{ matrix.arch }} ${{ vars.SF_USER }}@frs.sourceforge.net:/home/frs/project/${{ vars.SF_REPO }}/
 
       - name: Release
         uses: softprops/action-gh-release@v2
